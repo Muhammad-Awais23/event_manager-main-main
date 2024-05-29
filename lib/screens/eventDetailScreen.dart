@@ -1,7 +1,10 @@
+import 'package:event_manager/screens/historyscreen.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,12 +19,33 @@ class EventDetailsPage extends StatefulWidget {
 }
 
 class _EventDetailsPageState extends State<EventDetailsPage> {
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
   late String userdocid;
   String? _selectedTimeSlot;
   String? _selectedPaymentMetod;
   String? _selectedAdanvcedPay;
   List<String> _selectedFacilities = [];
   List<String> _selectedFoodItems = [];
+  Future<void> _showBookingNotification(String eventName) async {
+    var androidPlatformChannelSpecifics = const AndroidNotificationDetails(
+      'default_notification_channel_id',
+      'channel_name',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+    );
+    var platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      'Event Booked',
+      '$eventName was successfully Booked!',
+      platformChannelSpecifics,
+      payload: 'item x',
+    );
+  }
 
   Future<void> _loadUserData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -125,98 +149,154 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
       String userEmail = userData['email'] ?? '';
       String userContact = userData['contact'] ?? '';
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userdocid)
-          .collection('bookings')
-          .add({
-        'eventId': widget.eventId,
-        'eventName': eventName,
-        'eventAddress': eventAddress,
-        'eventCapacity': eventCapacity,
-        'eventDate': eventDate,
-        'eventDetails': eventDetails,
-        'eventPrice': eventPrice,
-        'imageUrls': imageUrls,
-        'selectedTimeSlot': _selectedTimeSlot,
-        'selectedFacilities': _selectedFacilities,
-        'selectedFoodItems': _selectedFoodItems,
-        'bookingDate': Timestamp.now(),
-        'accountNumber': accountNumber,
-        'bankDetails': bankDetails,
-        'contactnumber': contactnumber,
-        'paymentmethod': _selectedPaymentMetod,
-        'advancepaymeny': _selectedAdanvcedPay,
-        'adminId': widget.adminId
-      });
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.adminId)
-          .collection('bookedEvents')
-          .add({
-        'eventId': widget.eventId,
-        'userId': userdocid,
-        'userName': userName,
-        'userEmail': userEmail,
-        'userContact': userContact,
-        'eventName': eventName,
-        'eventAddress': eventAddress,
-        'eventDate': eventDate,
-        'selectedTimeSlot': _selectedTimeSlot,
-        'bookingDate': Timestamp.now(),
-      });
-      // Add booking details to admin's bookedEventsByUsers collection
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.adminId)
-          .collection('bookedEventsByUsers')
-          .add({
-        'eventId': widget.eventId,
-        'userId': userdocid,
-        'userName': userName,
-        'userEmail': userEmail,
-        'userContact': userContact,
-        'eventName': eventName,
-        'eventAddress': eventAddress,
-        'eventDate': eventDate,
-        'selectedTimeSlot': _selectedTimeSlot,
-        'bookingDate': Timestamp.now(),
-      });
       setState(() {
         _isBooking = false;
       });
 
-      showDialog(
+      // Calculate advance payment based on selected percentage
+      double advancePaymentPercentage = 0.3; // Default to 30%
+      if (_selectedAdanvcedPay == '20%') {
+        advancePaymentPercentage = 0.2;
+      } else if (_selectedAdanvcedPay == '50%') {
+        advancePaymentPercentage = 0.5;
+      }
+      double advancePayment =
+          double.parse(eventPrice) * advancePaymentPercentage;
+
+      // Show confirmation dialog
+      bool confirmBooking = await showDialog(
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: Text('Thank You!'),
-            content: Text('Thank you for choosing $eventName.'),
+            title: const Text('Confirm Booking?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Event: $eventName'),
+                Text('Total Price: $eventPrice'),
+                Text(
+                    'Advance Payment (${_selectedAdanvcedPay}): $advancePayment'),
+              ],
+            ),
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(false); // No, cancel booking
                 },
-                child: Text('OK'),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true); // Yes, confirm booking
+                },
+                child: const Text('Confirm'),
               ),
             ],
           );
         },
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Event booked successfully.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (confirmBooking != null && confirmBooking) {
+        // Proceed with booking
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userdocid)
+            .collection('bookings')
+            .add({
+          'eventId': widget.eventId,
+          'eventName': eventName,
+          'eventAddress': eventAddress,
+          'eventCapacity': eventCapacity,
+          'eventDate': eventDate,
+          'eventDetails': eventDetails,
+          'eventPrice': eventPrice,
+          'imageUrls': imageUrls,
+          'selectedTimeSlot': _selectedTimeSlot,
+          'selectedFacilities': _selectedFacilities,
+          'selectedFoodItems': _selectedFoodItems,
+          'bookingDate': Timestamp.now(),
+          'accountNumber': accountNumber,
+          'bankDetails': bankDetails,
+          'contactnumber': contactnumber,
+          'paymentmethod': _selectedPaymentMetod,
+          'advancepaymeny': _selectedAdanvcedPay,
+          'adminId': widget.adminId
+        });
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.adminId)
+            .collection('bookedEvents')
+            .add({
+          'eventId': widget.eventId,
+          'userId': userdocid,
+          'userName': userName,
+          'userEmail': userEmail,
+          'userContact': userContact,
+          'eventName': eventName,
+          'eventAddress': eventAddress,
+          'eventDate': eventDate,
+          'selectedTimeSlot': _selectedTimeSlot,
+          'bookingDate': Timestamp.now(),
+        });
+
+        // Add booking details to admin's bookedEventsByUsers collection
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.adminId)
+            .collection('bookedEventsByUsers')
+            .add({
+          'eventId': widget.eventId,
+          'userId': userdocid,
+          'userName': userName,
+          'userEmail': userEmail,
+          'userContact': userContact,
+          'eventName': eventName,
+          'eventAddress': eventAddress,
+          'eventDate': eventDate,
+          'selectedTimeSlot': _selectedTimeSlot,
+          'bookingDate': Timestamp.now(),
+        });
+
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text('Thank You!'),
+              content: Text('Thank you for choosing $eventName.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
+        );
+        await _showBookingNotification(eventName);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Event booked successfully.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
   @override
   void initState() {
     super.initState();
+    var initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    var initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+    flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+    );
     _loadUserData();
   }
 
@@ -359,7 +439,7 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                             onTap: () {
                               _launchDialer(contactnumbeer);
                             },
-                            child: SizedBox(
+                            child: const SizedBox(
                               height: 20,
                               child: Text(
                                 'Contact Organizer',

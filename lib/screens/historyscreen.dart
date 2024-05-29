@@ -235,15 +235,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  void _submitRating(DocumentSnapshot booking, double rating, String comment) {
-    FirebaseFirestore.instance
+  void _submitRating(
+      DocumentSnapshot booking, double rating, String comment) async {
+    DocumentReference eventRef = FirebaseFirestore.instance
         .collection('users')
         .doc(booking['adminId'])
         .collection('events')
-        .doc(booking['eventId'])
-        .update({
-      'rating': rating,
-      'comment': comment,
+        .doc(booking['eventId']);
+
+    FirebaseFirestore.instance.runTransaction((transaction) async {
+      DocumentSnapshot eventSnapshot = await transaction.get(eventRef);
+
+      if (!eventSnapshot.exists) {
+        throw Exception("Event does not exist!");
+      }
+
+      Map<String, dynamic> eventData =
+          eventSnapshot.data() as Map<String, dynamic>;
+
+      int ratingCount = eventData['ratingCount'] ?? 0;
+      double totalRating = (eventData['totalRating'] ?? 0.0) as double;
+
+      ratingCount += 1;
+      totalRating += rating;
+
+      double averageRating = totalRating / ratingCount;
+
+      transaction.update(eventRef, {
+        'ratingCount': ratingCount,
+        'totalRating': totalRating,
+        'averageRating': averageRating.toStringAsFixed(1),
+        'comment': comment,
+      });
     });
   }
 }

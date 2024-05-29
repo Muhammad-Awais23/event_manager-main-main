@@ -32,6 +32,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', false);
+      await prefs.setBool('isAdminLoggedIn', false);
     } catch (e) {
       print("Error logging out: $e");
     }

@@ -116,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return userId;
   }
 
+  bool isAdminLoggedIn = false;
   Future<String?> _fetchUsernameFromFirestore(String email) async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -141,6 +142,9 @@ class _LoginScreenState extends State<LoginScreen> {
             .where('email', isEqualTo: _email)
             .limit(1) // Limit to 1 document
             .get();
+    setState(() {
+      isAdminLoggedIn = true;
+    });
 
     // Check if there's a document with the specified email
     if (querySnapshot.docs.isNotEmpty) {
@@ -158,6 +162,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await prefs.setString('username', username!);
       await prefs.setString('userdocidforadmin', userdocid!);
       await prefs.setString('devicdeid', deviceid!);
+
+      await prefs.setBool('isAdminLoggedIn', true);
       // Log in the user using FirebaseAuth
       try {
         UserCredential userCredential =
@@ -325,6 +331,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   await prefs.setString('username', username!);
                                   await prefs.setString('userid', userId!);
                                   await prefs.setString('userdocid', userId2!);
+                                  await prefs.setBool('isUserLoggedIn', true);
+
                                   print('object');
                                   print(userId2);
                                   Navigator.push(
